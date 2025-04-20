@@ -5,7 +5,7 @@ edition = "2024"
 description = "Installer for the tx3 toolchain"
 authors = ["TxPipe <hello@txpipe.com>"]
 license = "Apache-2.0"
-publish = false
+repository = "https://github.com/txpipe/up"
 
 [dependencies]
 self-replace = "1.5.0"
@@ -21,3 +21,23 @@ reqwest = { version = "0.11", features = ["json"] }
 futures-util = "0.3"
 flate2 = "1.0"
 tar = "0.4"
+
+# The profile that 'cargo dist' will build with
+[profile.dist]
+inherits = "release"
+lto = "thin"
+
+# Config for 'cargo dist'
+[workspace.metadata.dist]
+# The preferred cargo-dist version to use in CI (Cargo.toml SemVer syntax)
+cargo-dist-version = "0.14.1"
+# CI backends to support
+ci = "github"
+# The installers to generate for each app
+installers = ["shell"]
+# Target platforms to build apps for (Rust target-triple syntax)
+targets = ["aarch64-apple-darwin", "x86_64-apple-darwin", "x86_64-unknown-linux-gnu"]
+# Publish jobs to run in CI
+pr-run-mode = "plan"
+# Whether to install an updater program
+install-updater = true
