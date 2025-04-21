@@ -8,7 +8,7 @@ use crate::{Config, perm_path};
 
 #[derive(Parser, Default)]
 pub struct Args {
-    #[arg(short, long, default_value = "stable")]
+    #[arg(default_value = "stable")]
     pub channel: String,
 }
 
@@ -31,7 +31,7 @@ pub async fn run(args: &Args, config: &Config) -> anyhow::Result<()> {
     set_default_channel(&config.root_dir(), &args.channel)?;
     println!("Set default channel to {}", args.channel);
 
-    println!("Checking or updating PATH variable");
+    println!("updating PATH variable");
     perm_path::check_or_update(config)?;
     Ok(())
 }
