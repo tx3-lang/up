@@ -16,7 +16,7 @@ fn print_tool(tool: &crate::tools::Tool, config: &Config) -> anyhow::Result<()> 
     );
 
     let version = Command::new(tool.bin_path(config))
-        .arg("--version")
+        .arg(tool.version_cmd())
         .output()?;
 
     let version = String::from_utf8(version.stdout)?;
@@ -32,12 +32,13 @@ fn print_tool(tool: &crate::tools::Tool, config: &Config) -> anyhow::Result<()> 
     Ok(())
 }
 
-pub async fn run(args: &Args, config: &Config) -> anyhow::Result<()> {
+pub async fn run(_args: &Args, config: &Config) -> anyhow::Result<()> {
     // for each tool, trigger a shell command to print the version
     for tool in crate::tools::all_tools() {
-        println!("{}", tool.name);
+        println!("{}: {}", tool.name, tool.description);
+        println!("min version: {}", tool.min_version);
 
-        let ok = print_tool(&tool, config);
+        let ok = print_tool(tool, config);
 
         if let Err(e) = ok {
             println!("error: {}", e);

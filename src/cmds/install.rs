@@ -1,16 +1,14 @@
 use anyhow::{Context, Result};
 use clap::Parser;
 use flate2::read::GzDecoder;
-use futures_util::StreamExt;
 use octocrab::Octocrab;
 use octocrab::models::repos::Asset;
 use reqwest::Client;
-use std::env;
 use std::fs;
 use std::io::Write;
+use std::path::Path;
 use std::path::PathBuf;
 use tar::Archive;
-use tar::Entry;
 use xz2::read::XzDecoder;
 
 use crate::{Config, tools::*};
@@ -49,7 +47,7 @@ pub async fn download_binary(url: &str, path: &PathBuf) -> Result<()> {
 // Find the first file that starts with the tool name
 fn extract_binary_main_entry<R: std::io::Read>(
     mut archive: Archive<R>,
-    install_dir: &PathBuf,
+    install_dir: &Path,
     tool_name: &str,
 ) -> anyhow::Result<()> {
     for entry in archive.entries()? {
@@ -60,7 +58,7 @@ fn extract_binary_main_entry<R: std::io::Read>(
             .and_then(|n| n.to_str())
             .context("Invalid filename in archive")?;
 
-        if filename.starts_with(tool_name) && entry.header().entry_type().is_file() {
+        if filename.eq(tool_name) && entry.header().entry_type().is_file() {
             let binary_path = install_dir.join(filename);
             entry.unpack(&binary_path)?;
 
@@ -72,13 +70,15 @@ fn extract_binary_main_entry<R: std::io::Read>(
                 perms.set_mode(0o755);
                 fs::set_permissions(&binary_path, perms)?;
             }
+
+            return Ok(());
         }
     }
 
     anyhow::bail!("No matching binary found in archive")
 }
 
-fn extract_binary(path: &PathBuf, install_dir: &PathBuf, tool_name: &str) -> Result<()> {
+fn extract_binary(path: &Path, install_dir: &Path, tool_name: &str) -> Result<()> {
     let file = fs::File::open(path)?;
 
     let extension = path.extension().and_then(|s| s.to_str());
@@ -86,11 +86,11 @@ fn extract_binary(path: &PathBuf, install_dir: &PathBuf, tool_name: &str) -> Res
     match extension {
         Some("gz") => {
             let archive = Archive::new(GzDecoder::new(file));
-            extract_binary_main_entry(archive, install_dir, tool_name)
+            extract_binary_main_entry(archive, install_dir, tool_name)?;
         }
         Some("xz") => {
             let archive = Archive::new(XzDecoder::new(file));
-            extract_binary_main_entry(archive, install_dir, tool_name)
+            extract_binary_main_entry(archive, install_dir, tool_name)?;
         }
         _ => anyhow::bail!("Unsupported archive format. Expected .gz or .xz"),
     };
@@ -148,7 +148,7 @@ pub async fn install_tool(tool: &Tool, version: &Option<String>, config: &Config
 
     // Download the binary
     let binary_path = install_dir.join(&binary_asset.name);
-    download_binary(&binary_asset.browser_download_url.to_string(), &binary_path).await?;
+    download_binary(binary_asset.browser_download_url.as_ref(), &binary_path).await?;
 
     println!("Extracting binary...");
     extract_binary(&binary_path, &install_dir, &tool.name)?;
@@ -167,7 +167,7 @@ pub async fn install_tool(tool: &Tool, version: &Option<String>, config: &Config
 
 pub async fn run(args: &Args, config: &Config) -> anyhow::Result<()> {
     let tools: Vec<_> = match &args.tool {
-        Some(tool) => tool_by_name(&tool).collect(),
+        Some(tool) => tool_by_name(tool).collect(),
         None => all_tools().collect(),
     };
 

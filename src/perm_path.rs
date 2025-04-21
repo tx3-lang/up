@@ -1,12 +1,12 @@
 use anyhow::Context;
-use dirs;
-use std::env;
-use std::fmt;
-use std::fs::{File, OpenOptions};
-use std::io::{self, Write};
-use std::path::{Path, PathBuf};
+use std::fs::OpenOptions;
+use std::io::Write;
+use std::path::Path;
 
 use crate::Config;
+
+// improve things by borrowing from the rustup approach
+// https://github.com/rust-lang/rustup/blob/bcfac6278c7c2f16a41294f7533aeee2f7f88d07/src/cli/self_update/shell.rs
 
 enum KnownShell {
     Posix,

@@ -1,8 +1,7 @@
-use anyhow::{Context, Result};
+use anyhow::Result;
 use clap::Parser;
-use std::fs;
 use std::os::unix::fs::symlink;
-use std::path::PathBuf;
+use std::{fs, path::Path};
 
 use crate::{Config, perm_path};
 
@@ -12,7 +11,7 @@ pub struct Args {
     pub channel: String,
 }
 
-fn set_default_channel(tx3_root: &PathBuf, channel: &str) -> Result<()> {
+fn set_default_channel(tx3_root: &Path, channel: &str) -> Result<()> {
     let default_path = tx3_root.join("default");
     let channel_path = tx3_root.join(channel);
 

@@ -12,7 +12,7 @@ impl Tool {
     }
 
     pub fn version_cmd(&self) -> String {
-        format!("{} --version", self.name)
+        "--version".to_string()
     }
 }
 
