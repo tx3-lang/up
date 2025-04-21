@@ -30,6 +30,8 @@ enum Commands {
     Uninstall,
     /// Set the default channel
     Default(cmds::default::Args),
+    /// Show the version of the tx3 toolchain
+    Show(cmds::show::Args),
 }
 
 pub struct Config {
@@ -85,6 +87,7 @@ async fn main() -> Result<()> {
             Commands::Update => todo!(),
             Commands::Uninstall => todo!(),
             Commands::Default(args) => cmds::default::run(&args, &config).await?,
+            Commands::Show(args) => cmds::show::run(&args, &config).await?,
         }
     } else {
         cmds::install::run(&cmds::install::Args::default(), &config).await?;

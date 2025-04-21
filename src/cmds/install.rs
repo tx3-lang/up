@@ -10,6 +10,8 @@ use std::fs;
 use std::io::Write;
 use std::path::PathBuf;
 use tar::Archive;
+use tar::Entry;
+use xz2::read::XzDecoder;
 
 use crate::{Config, tools::*};
 
@@ -44,15 +46,14 @@ pub async fn download_binary(url: &str, path: &PathBuf) -> Result<()> {
     Ok(())
 }
 
-fn extract_binary(path: &PathBuf, install_dir: &PathBuf, tool_name: &str) -> Result<()> {
-    let tar_gz = fs::File::open(path)?;
-    let tar = GzDecoder::new(tar_gz);
-    let mut archive = Archive::new(tar);
-
-    // Find the first file that starts with the tool name
-    let mut binary_entry = None;
+// Find the first file that starts with the tool name
+fn extract_binary_main_entry<R: std::io::Read>(
+    mut archive: Archive<R>,
+    install_dir: &PathBuf,
+    tool_name: &str,
+) -> anyhow::Result<()> {
     for entry in archive.entries()? {
-        let entry = entry?;
+        let mut entry = entry?;
         let path = entry.path()?;
         let filename = path
             .file_name()
@@ -60,23 +61,39 @@ fn extract_binary(path: &PathBuf, install_dir: &PathBuf, tool_name: &str) -> Res
             .context("Invalid filename in archive")?;
 
         if filename.starts_with(tool_name) && entry.header().entry_type().is_file() {
-            binary_entry = Some(entry);
-            break;
+            let binary_path = install_dir.join(filename);
+            entry.unpack(&binary_path)?;
+
+            // Make the binary executable
+            #[cfg(unix)]
+            {
+                use std::os::unix::fs::PermissionsExt;
+                let mut perms = fs::metadata(&binary_path)?.permissions();
+                perms.set_mode(0o755);
+                fs::set_permissions(&binary_path, perms)?;
+            }
         }
     }
 
-    let mut binary_entry = binary_entry.context("No matching binary found in archive")?;
-    let binary_path = install_dir.join(tool_name);
-    binary_entry.unpack(&binary_path)?;
+    anyhow::bail!("No matching binary found in archive")
+}
 
-    // Make the binary executable
-    #[cfg(unix)]
-    {
-        use std::os::unix::fs::PermissionsExt;
-        let mut perms = fs::metadata(&binary_path)?.permissions();
-        perms.set_mode(0o755);
-        fs::set_permissions(&binary_path, perms)?;
-    }
+fn extract_binary(path: &PathBuf, install_dir: &PathBuf, tool_name: &str) -> Result<()> {
+    let file = fs::File::open(path)?;
+
+    let extension = path.extension().and_then(|s| s.to_str());
+
+    match extension {
+        Some("gz") => {
+            let archive = Archive::new(GzDecoder::new(file));
+            extract_binary_main_entry(archive, install_dir, tool_name)
+        }
+        Some("xz") => {
+            let archive = Archive::new(XzDecoder::new(file));
+            extract_binary_main_entry(archive, install_dir, tool_name)
+        }
+        _ => anyhow::bail!("Unsupported archive format. Expected .gz or .xz"),
+    };
 
     Ok(())
 }

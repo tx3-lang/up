@@ -6,7 +6,19 @@ pub struct Tool {
     pub repo_name: String,
 }
 
-use std::sync::OnceLock;
+impl Tool {
+    pub fn bin_path(&self, config: &Config) -> PathBuf {
+        config.bin_dir().join(self.name.clone())
+    }
+
+    pub fn version_cmd(&self) -> String {
+        format!("{} --version", self.name)
+    }
+}
+
+use std::{path::PathBuf, sync::OnceLock};
+
+use crate::Config;
 
 static TOOLS: OnceLock<Vec<Tool>> = OnceLock::new();
 
@@ -22,7 +34,7 @@ pub fn all_tools() -> impl Iterator<Item = &'static Tool> {
                     repo_name: "trix".to_string(),
                 },
                 Tool {
-                    name: "lsp".to_string(),
+                    name: "tx3-lsp".to_string(),
                     description: "A language server for tx3".to_string(),
                     min_version: "0.1.0".to_string(),
                     repo_owner: "tx3-lang".to_string(),
