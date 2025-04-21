@@ -5,10 +5,18 @@ use std::{fs, path::Path};
 
 use crate::{Config, perm_path};
 
-#[derive(Parser, Default)]
+#[derive(Parser)]
 pub struct Args {
     #[arg(default_value = "stable")]
     pub channel: String,
+}
+
+impl Default for Args {
+    fn default() -> Self {
+        Self {
+            channel: "stable".to_string(),
+        }
+    }
 }
 
 fn set_default_channel(tx3_root: &Path, channel: &str) -> Result<()> {
