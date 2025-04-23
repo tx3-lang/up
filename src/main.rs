@@ -7,8 +7,17 @@ mod cmds;
 mod perm_path;
 mod tools;
 
+pub const BANNER: &str = color_print::cstr! {
+    r#"
+<#FFFFFF>████████╗</#FFFFFF><#999999>██╗  ██╗</#999999><#FF007F>██████╗ </#FF007F>
+<#FFFFFF>╚══██╔══╝</#FFFFFF><#999999>╚██╗██╔╝</#999999><#FF007F>╚════██╗</#FF007F>
+<#FFFFFF>   ██║   </#FFFFFF><#999999> ╚███╔╝ </#999999><#FF007F> █████╔╝</#FF007F>
+<#FFFFFF>   ██║   </#FFFFFF><#999999> ██╔██╗ </#999999><#FF007F> ╚═══██╗</#FF007F>
+<#FFFFFF>   ██║   </#FFFFFF><#999999>██╔╝ ██╗</#999999><#FF007F>██████╔╝</#FF007F>
+<#FFFFFF>   ╚═╝   </#FFFFFF><#999999>╚═╝  ╚═╝</#999999><#FF007F>╚═════╝ </#FF007F>"#
+    };
 #[derive(Parser)]
-#[command(author, version, about, long_about = None)]
+#[command(author, version, about, long_about = Some(BANNER))]
 struct Cli {
     #[arg(short, long, env = "TX3_ROOT")]
     root_dir: Option<PathBuf>,
@@ -81,6 +90,8 @@ async fn main() -> Result<()> {
         channel: cli.channel,
     };
 
+    println!("\n {}\n", BANNER.trim_start());
+    
     if let Some(command) = cli.command {
         match command {
             Commands::Install(args) => cmds::install::run(&args, &config).await?,
