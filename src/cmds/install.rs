@@ -10,6 +10,7 @@ use std::path::Path;
 use std::path::PathBuf;
 use tar::Archive;
 use xz2::read::XzDecoder;
+use serde::{Deserialize, Serialize};
 
 use crate::{Config, tools::*};
 
@@ -17,6 +18,18 @@ use crate::{Config, tools::*};
 pub struct Args {
     pub tool: Option<String>,
     pub version: Option<String>,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+struct VersionsFile {
+    tools: Vec<ToolVersion>,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+struct ToolVersion {
+    repo_name: String,
+    repo_owner: String,
+    version: String,
 }
 
 pub async fn download_binary(url: &str, path: &PathBuf) -> Result<()> {
@@ -166,19 +179,36 @@ pub async fn install_tool(tool: &Tool, version: &Option<String>, config: &Config
 }
 
 pub async fn run(args: &Args, config: &Config) -> anyhow::Result<()> {
-    let tools: Vec<_> = match &args.tool {
-        Some(tool) => tool_by_name(tool).collect(),
-        None => all_tools().collect(),
+    let tools = match &args.tool {
+        Some(tool) => tool_by_name(tool).await?,
+        None => all_tools().await?,
     };
 
     if tools.is_empty() {
         return Err(anyhow::anyhow!("No tools found to install"));
     }
 
-    for tool in tools {
+    for tool in &tools {
         println!("Installing {}...", tool.name);
-        install_tool(tool, &args.version, config).await?;
+        install_tool(&tool, &args.version, config).await?;
     }
+
+    let versions_content = VersionsFile {
+        tools: tools
+            .into_iter()
+            .map(|tool| ToolVersion {
+                repo_name: tool.repo_name,
+                repo_owner: tool.repo_owner,
+                version: tool.min_version,
+            })
+            .collect(),
+    };
+
+    let content = serde_json::to_string_pretty(&versions_content)
+        .map_err(|e| anyhow::anyhow!("Failed to serialize update info: {}", e))?;
+
+    std::fs::write(config.versions_file(), content)
+        .map_err(|e| anyhow::anyhow!("Failed to write update file: {}", e))?;
 
     Ok(())
 }
