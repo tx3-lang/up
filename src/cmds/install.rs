@@ -46,7 +46,7 @@ pub async fn download_binary(url: &str, path: &PathBuf) -> Result<()> {
         if total_size > 0 {
             let progress = (downloaded as f64 / total_size as f64) * 100.0;
             print!(
-                "\rDownloading: {:.1}% ({}/{})",
+                "\r> Downloading: {:.1}% ({}/{})",
                 progress, downloaded, total_size
             );
             std::io::stdout().flush()?;
@@ -133,27 +133,37 @@ fn find_arch_asset<'a>(tool_name: &str, assets: &'a [Asset]) -> Option<&'a Asset
     assets.iter().find(|asset| asset.name.contains(&target))
 }
 
-pub async fn install_tool(tool: &Tool, version: &Option<String>, config: &Config) -> Result<()> {
+pub async fn install_tool(tool: &Tool, current_version: &Option<String>, version: &Option<String>, config: &Config) -> Result<()> {
+    let new_version = version.clone().unwrap_or(tool.min_version.clone());
+
+    if let Some(current_version) = current_version {
+        if !version_compare(&new_version, current_version) {
+            println!("{} is up to date", tool.name);
+            return Ok(());
+        }
+    }
+
+    println!("A new version of {} is available! 🎉", tool.name);
+    println!("    Current version: {}", current_version.clone().unwrap_or("-".to_string()));
+    println!("    Latest version:  {}", new_version);
+    println!("\n> Installing...");
+
     let octocrab = Octocrab::builder().build()?;
     let owner = tool.repo_owner.clone();
     let repo = tool.repo_name.clone();
     let repo = octocrab.repos(owner, repo);
     let releases = repo.releases();
+    
+    let release = releases.get_by_tag(&format!("v{}", new_version)).await
+        .map_err(|e| anyhow::anyhow!("Release not found: {}", e))?;
 
-    // Get the latest release or specific version
-    let release = if let Some(version) = version {
-        releases.get_by_tag(&format!("v{}", version)).await?
-    } else {
-        releases.get_latest().await?
-    };
-
-    println!("Found release: {}", release.tag_name);
+    println!("> Found release: {}", release.tag_name);
 
     // Find the binary asset
     let binary_asset = find_arch_asset(&tool.name, &release.assets)
         .context("No binary asset found for current platform")?;
 
-    println!("Downloading binary: {}", binary_asset.name);
+    println!("> Downloading binary: {}", binary_asset.name);
 
     // Create installation directory
     let install_dir = config.bin_dir().clone();
@@ -163,7 +173,7 @@ pub async fn install_tool(tool: &Tool, version: &Option<String>, config: &Config
     let binary_path = install_dir.join(&binary_asset.name);
     download_binary(binary_asset.browser_download_url.as_ref(), &binary_path).await?;
 
-    println!("Extracting binary...");
+    println!("> Extracting binary...");
     extract_binary(&binary_path, &install_dir, &tool.name)?;
 
     // Clean up the tar.gz file
@@ -174,6 +184,54 @@ pub async fn install_tool(tool: &Tool, version: &Option<String>, config: &Config
         tool.name,
         install_dir.join(&tool.name).display()
     );
+    println!();
+
+    Ok(())
+}
+
+fn version_compare(version_a: &str, version_b: &str) -> bool {
+    let parts_a: Vec<u32> = version_a
+        .split('.')
+        .filter_map(|s| s.parse().ok())
+        .collect();
+    
+    let parts_b: Vec<u32> = version_b
+        .split('.')
+        .filter_map(|s| s.parse().ok())
+        .collect();
+    
+    let max_len = parts_a.len().max(parts_b.len());
+    
+    for i in 0..max_len {
+        let a = parts_a.get(i).copied().unwrap_or(0);
+        let b = parts_b.get(i).copied().unwrap_or(0);
+        
+        if a > b {
+            return true;
+        } else if a < b {
+            return false;
+        }
+    }
+    
+    false
+}
+
+fn load_versions_file(config: &Config) -> Result<VersionsFile> {
+    let content = std::fs::read_to_string(config.versions_file())
+        .map_err(|e| anyhow::anyhow!("Failed to read versions file: {}", e))?;
+    
+    let versions: VersionsFile = serde_json::from_str(&content)
+        .map_err(|e| anyhow::anyhow!("Failed to parse versions file: {}", e))?;
+
+    Ok(versions)
+}
+
+fn update_versions_file(versions: VersionsFile, config: &Config) -> Result<()> {
+    let content = serde_json::to_string_pretty(&versions)
+        .map_err(|e| anyhow::anyhow!("Failed to serialize versions info: {}", e))?;
+
+    std::fs::write(config.versions_file(), content)
+        .map_err(|e| anyhow::anyhow!("Failed to write versions file: {}", e))?;
 
     Ok(())
 }
@@ -187,28 +245,28 @@ pub async fn run(args: &Args, config: &Config) -> anyhow::Result<()> {
     if tools.is_empty() {
         return Err(anyhow::anyhow!("No tools found to install"));
     }
+    
+    let mut versions = load_versions_file(config)?;
 
     for tool in &tools {
-        println!("Installing {}...", tool.name);
-        install_tool(&tool, &args.version, config).await?;
+        let mut current_version = None;
+        if let Some(t) = versions.tools.iter().find(|t| t.repo_name == tool.repo_name && t.repo_owner == tool.repo_owner) {
+            current_version = Some(t.version.clone());
+        }
+        install_tool(&tool, &current_version, &args.version, config).await?;
     }
 
-    let versions_content = VersionsFile {
-        tools: tools
-            .into_iter()
-            .map(|tool| ToolVersion {
-                repo_name: tool.repo_name,
-                repo_owner: tool.repo_owner,
-                version: tool.min_version,
-            })
-            .collect(),
-    };
+    for tool in versions.tools.iter_mut() {
+        if let Some(t) = tools.iter().find(|t| t.repo_name == tool.repo_name && t.repo_owner == tool.repo_owner) {
+            if tool.version != t.min_version {
+                tool.version = t.min_version.clone();
+            }
+        }
+    }
 
-    let content = serde_json::to_string_pretty(&versions_content)
-        .map_err(|e| anyhow::anyhow!("Failed to serialize update info: {}", e))?;
+    update_versions_file(versions, config)?;
 
-    std::fs::write(config.versions_file(), content)
-        .map_err(|e| anyhow::anyhow!("Failed to write update file: {}", e))?;
+    println!();
 
     Ok(())
 }
