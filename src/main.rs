@@ -7,6 +7,7 @@ mod bin;
 mod cmds;
 mod manifest;
 mod perm_path;
+mod updates;
 
 pub const BANNER: &str = color_print::cstr! {
 r#"
@@ -32,10 +33,10 @@ struct Cli {
 
 #[derive(Subcommand)]
 enum Commands {
-    /// Install the tx3 toolchain
+    /// Install or update the tx3 toolchain
     Install(cmds::install::Args),
-    /// Update the tx3 toolchain to the latest version
-    Update,
+    /// Check for updates
+    Check(cmds::check::Args),
     /// Uninstall the tx3 toolchain
     Uninstall,
     /// Set the default channel
@@ -84,6 +85,10 @@ impl Config {
     pub fn manifest_file(&self) -> PathBuf {
         self.channel_dir().join("manifest.json")
     }
+
+    pub fn updates_file(&self) -> PathBuf {
+        self.channel_dir().join("updates.json")
+    }
 }
 
 #[tokio::main]
@@ -100,7 +105,7 @@ async fn main() -> anyhow::Result<()> {
     if let Some(command) = cli.command {
         match command {
             Commands::Install(args) => cmds::install::run(&args, &config).await?,
-            Commands::Update => todo!(),
+            Commands::Check(args) => cmds::check::run(&args, &config).await?,
             Commands::Uninstall => todo!(),
             Commands::Default(args) => cmds::default::run(&args, &config).await?,
             Commands::Show(args) => cmds::show::run(&args, &config).await?,
