@@ -15,8 +15,8 @@ use std::path::PathBuf;
 use tar::Archive;
 use xz2::read::XzDecoder;
 
-use crate::bin;
 use crate::manifest;
+use crate::updates;
 use crate::{Config, manifest::*};
 
 #[derive(Parser, Default)]
@@ -163,6 +163,7 @@ pub async fn download_tool_from_asset(tool: &Tool, asset: &Asset, config: &Confi
         tool.name,
         install_dir.join(&tool.name).display()
     );
+
     println!();
 
     Ok(())
@@ -203,23 +204,6 @@ async fn find_matching_release(
     Ok(None)
 }
 
-async fn find_installed_version(tool: &Tool, config: &Config) -> anyhow::Result<Option<Version>> {
-    if !bin::is_installed(tool, config).await? {
-        return Ok(None);
-    }
-
-    let current_version = bin::check_current_version(tool, config).await;
-
-    match current_version {
-        Ok(version) => Ok(Some(version)),
-        Err(_) => {
-            // if the version command fails, we assume there's something wrong with the
-            // binary and respond as if it wasn't installed
-            Ok(None)
-        }
-    }
-}
-
 async fn install_tool(tool: &Tool, requested: &VersionReq, config: &Config) -> anyhow::Result<()> {
     println!("\n> Installing {} at version {}", tool.name, requested);
 
@@ -240,38 +224,35 @@ async fn install_tool(tool: &Tool, requested: &VersionReq, config: &Config) -> a
     Ok(())
 }
 
-pub async fn run(args: &Args, config: &Config) -> anyhow::Result<()> {
+pub async fn run(_args: &Args, config: &Config) -> anyhow::Result<()> {
     let manifest = manifest::load_manifest(config, true).await?;
 
-    let to_install: Vec<_> = if let Some(filter) = &args.tool {
-        manifest.tools().filter(|x| x.name == *filter).collect()
-    } else {
-        manifest.tools().collect()
-    };
+    let updates = updates::check_updates(&manifest, config).await?;
 
-    if to_install.is_empty() {
-        return Err(anyhow::anyhow!("No tools found to install"));
+    if updates.is_empty() {
+        println!("You are up to date 🎉");
+        return Ok(());
     }
 
-    for tool in to_install.iter() {
-        let current = find_installed_version(tool, config).await?;
-        let requested = VersionReq::parse(&tool.version)?;
+    for update in updates {
+        let tool = manifest.tool_by_name(&update.tool).unwrap();
 
-        if let Some(current) = current {
-            if requested.matches(&current) {
-                println!("\nYour version of {} is up to date 👌", tool.name);
-
-                continue;
-            } else {
-                println!("\nYour version of {} needs to be updated 😬", tool.name);
-                println!("  Current version: {current}");
-                println!("  Requested version: {requested}");
-            }
+        if let Some(current) = update.current()? {
+            println!("\nYour version of {} needs to be updated 😬", tool.name);
+            println!("  Current version: {current}");
+            println!("  Requested version: {}", update.requested);
         } else {
             println!("\nYour need to install {} 📦", tool.name);
         }
 
-        install_tool(tool, &requested, config).await?;
+        install_tool(tool, &update.requested()?, config).await?;
+    }
+
+    // we do a second check to make sure we have the latest updates
+    let after = updates::check_updates(&manifest, config).await?;
+
+    if !after.is_empty() {
+        println!("Seems that you still have updates to install, please run `tx3up install` again",);
     }
 
     Ok(())

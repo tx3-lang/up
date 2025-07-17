@@ -38,6 +38,10 @@ impl Manifest {
     pub fn tools(&self) -> impl Iterator<Item = &Tool> {
         self.tools.iter()
     }
+
+    pub fn tool_by_name(&self, name: &str) -> Option<&Tool> {
+        self.tools.iter().find(|tool| tool.name == name)
+    }
 }
 
 async fn fetch_manifest_content(url: &str) -> anyhow::Result<String> {
