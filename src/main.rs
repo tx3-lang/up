@@ -18,13 +18,14 @@ r#"
 <#FFFFFF>   ██║   </#FFFFFF><#999999>██╔╝ ██╗</#999999><#FF007F>██████╔╝</#FF007F>
 <#FFFFFF>   ╚═╝   </#FFFFFF><#999999>╚═╝  ╚═╝</#999999><#FF007F>╚═════╝ </#FF007F>"#
 };
+
 #[derive(Parser)]
 #[command(author, version, about, long_about = Some(BANNER))]
 struct Cli {
-    #[arg(short, long, env = "TX3_ROOT")]
+    #[arg(global = true, short, long, env = "TX3_ROOT")]
     root_dir: Option<PathBuf>,
 
-    #[arg(short, long, env = "TX3_CHANNEL")]
+    #[arg(global = true, short, long, env = "TX3_CHANNEL")]
     channel: Option<String>,
 
     #[command(subcommand)]
@@ -40,7 +41,8 @@ enum Commands {
     /// Uninstall the tx3 toolchain
     Uninstall,
     /// Set the default channel
-    Default(cmds::default::Args),
+    #[command(alias("default"))]
+    Use(cmds::r#use::Args),
     /// Show the version of the tx3 toolchain
     Show(cmds::show::Args),
 }
@@ -70,12 +72,69 @@ impl Config {
             .unwrap_or_else(|| Self::default_root_dir().unwrap())
     }
 
-    pub fn channel(&self) -> String {
-        self.channel.clone().unwrap_or_else(|| "stable".to_string())
+    pub fn fixed_channel_dir(&self) -> PathBuf {
+        self.root_dir().join("default")
+    }
+
+    pub fn fixed_channel(&self) -> anyhow::Result<Option<String>> {
+        let fixed_channel_dir = self.fixed_channel_dir();
+
+        if !fixed_channel_dir.exists() {
+            return Ok(None);
+        }
+
+        let target = std::fs::read_link(fixed_channel_dir).context("reading fixed channel dir")?;
+
+        let channel = target
+            .file_name()
+            .ok_or_else(|| anyhow::anyhow!("no fixed channel dir"))?;
+
+        Ok(Some(channel.to_str().unwrap().to_string()))
+    }
+
+    fn set_fixed_channel(&self, channel: &str) -> Result<()> {
+        let fixed_channel_dir = self.fixed_channel_dir();
+        let channel_dir = self.root_dir().join(channel);
+
+        // Remove existing symlink if it exists
+        if fixed_channel_dir.exists() {
+            std::fs::remove_file(&fixed_channel_dir)?;
+        }
+
+        // Create new symlink
+        std::os::unix::fs::symlink(&channel_dir, &fixed_channel_dir)?;
+
+        Ok(())
+    }
+
+    pub fn channel(&self) -> anyhow::Result<String> {
+        let explicit = self.channel.clone();
+
+        if let Some(explicit) = explicit {
+            return Ok(explicit);
+        }
+
+        if let Some(default) = self.fixed_channel()? {
+            return Ok(default);
+        }
+
+        Err(anyhow::anyhow!("no channel set"))
+    }
+
+    pub fn ensure_channel(&self) -> String {
+        match self.channel() {
+            Ok(channel) => channel,
+            Err(e) => {
+                eprintln!("Error getting channel: {}", e);
+                self.set_fixed_channel("stable").unwrap();
+                "stable".to_string()
+            }
+        }
     }
 
     pub fn channel_dir(&self) -> PathBuf {
-        self.root_dir().join(self.channel())
+        let channel = self.ensure_channel();
+        self.root_dir().join(channel)
     }
 
     pub fn bin_dir(&self) -> PathBuf {
@@ -102,17 +161,21 @@ async fn main() -> anyhow::Result<()> {
 
     println!("\n{}\n", BANNER.trim_start());
 
+    println!("root dir: {}", config.root_dir().display());
+    println!("current channel: {}", config.ensure_channel());
+    println!();
+
     if let Some(command) = cli.command {
         match command {
             Commands::Install(args) => cmds::install::run(&args, &config).await?,
             Commands::Check(args) => cmds::check::run(&args, &config).await?,
-            Commands::Uninstall => todo!(),
-            Commands::Default(args) => cmds::default::run(&args, &config).await?,
+            Commands::Use(args) => cmds::r#use::run(&args, &config).await?,
             Commands::Show(args) => cmds::show::run(&args, &config).await?,
+            Commands::Uninstall => todo!(),
         }
     } else {
         cmds::install::run(&cmds::install::Args::default(), &config).await?;
-        cmds::default::run(&cmds::default::Args::default(), &config).await?;
+        cmds::r#use::run(&cmds::r#use::Args::default(), &config).await?;
     }
 
     Ok(())
