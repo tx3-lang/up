@@ -79,6 +79,10 @@ impl Config {
     pub fn bin_dir(&self) -> PathBuf {
         self.channel_dir().join("bin")
     }
+
+    pub fn versions_file(&self) -> PathBuf {
+        self.root_dir().join("versions.json")
+    }
 }
 
 #[tokio::main]

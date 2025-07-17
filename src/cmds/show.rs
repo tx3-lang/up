@@ -34,11 +34,12 @@ fn print_tool(tool: &crate::tools::Tool, config: &Config) -> anyhow::Result<()> 
 
 pub async fn run(_args: &Args, config: &Config) -> anyhow::Result<()> {
     // for each tool, trigger a shell command to print the version
-    for tool in crate::tools::all_tools() {
+    for tool in crate::tools::all_tools().await? {
         println!("{}: {}", tool.name, tool.description);
         println!("min version: {}", tool.min_version);
+        println!("max version: {}", tool.max_version);
 
-        let ok = print_tool(tool, config);
+        let ok = print_tool(&tool, config);
 
         if let Err(e) = ok {
             println!("error: {}", e);
