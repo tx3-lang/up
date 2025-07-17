@@ -29,7 +29,7 @@ fn print_tool(tool: &crate::manifest::Tool, config: &Config) -> anyhow::Result<(
         version
     };
 
-    println!("installed version: {}", version);
+    println!("installed version: {version}");
 
     Ok(())
 }
@@ -40,10 +40,10 @@ pub async fn run(_args: &Args, config: &Config) -> anyhow::Result<()> {
     for tool in manifest.tools() {
         println!("{}: {}", tool.name, tool.description);
 
-        let ok = print_tool(&tool, config);
+        let ok = print_tool(tool, config);
 
         if let Err(e) = ok {
-            println!("error: {}", e);
+            eprintln!("error: {e}");
         }
     }
 

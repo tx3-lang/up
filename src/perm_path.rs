@@ -54,7 +54,7 @@ fn append_file(profile_path: &Path, source_cmd: &str) -> anyhow::Result<()> {
         .create(false)
         .open(profile_path)?;
 
-    write!(profile, "{}", source_cmd)?;
+    write!(profile, "{source_cmd}")?;
     profile.flush()?;
 
     Ok(())

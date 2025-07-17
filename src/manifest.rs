@@ -133,9 +133,7 @@ fn manifest_is_stale(timestamp: Option<SystemTime>) -> bool {
 pub async fn load_manifest(config: &Config, force_download: bool) -> anyhow::Result<Manifest> {
     let timestamp = check_manifest_timestamp(config).await?;
 
-    if timestamp.is_none() || force_download {
-        download_remote_manifest(config).await?;
-    } else if manifest_is_stale(timestamp) {
+    if manifest_is_stale(timestamp) || force_download {
         download_remote_manifest(config).await?;
     }
 

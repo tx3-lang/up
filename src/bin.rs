@@ -25,7 +25,6 @@ pub async fn check_current_version(tool: &Tool, config: &Config) -> anyhow::Resu
     let raw_version = run_version_cmd(tool, config).await?;
 
     let raw_version = raw_version
-        .trim()
         .split_whitespace()
         .last()
         .context("no version found in output")?;

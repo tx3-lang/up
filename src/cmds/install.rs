@@ -50,13 +50,11 @@ pub async fn download_binary(url: &str, path: &PathBuf) -> Result<()> {
 
         if total_size > 0 {
             let progress = (downloaded as f64 / total_size as f64) * 100.0;
-            print!(
-                "\r> Downloading: {:.1}% ({}/{})",
-                progress, downloaded, total_size
-            );
+            print!("\r> Downloading: {progress:.1}% ({downloaded}/{total_size})");
             std::io::stdout().flush()?;
         }
     }
+
     println!(); // New line after progress
 
     Ok(())
@@ -134,7 +132,7 @@ fn find_arch_asset(tool_name: &str, release: Release) -> Option<Asset> {
         _ => return None,
     };
 
-    let target = format!("{}-{}-{}", tool_name, arch, os);
+    let target = format!("{tool_name}-{arch}-{os}");
 
     release
         .assets
@@ -225,7 +223,7 @@ async fn find_installed_version(tool: &Tool, config: &Config) -> anyhow::Result<
 async fn install_tool(tool: &Tool, requested: &VersionReq, config: &Config) -> anyhow::Result<()> {
     println!("\n> Installing {} at version {}", tool.name, requested);
 
-    let Some((version, release)) = find_matching_release(tool, &requested).await? else {
+    let Some((version, release)) = find_matching_release(tool, requested).await? else {
         return Err(anyhow::anyhow!("No release found for {}", tool.name));
     };
 
