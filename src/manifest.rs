@@ -67,7 +67,7 @@ pub async fn download_remote_manifest(config: &Config) -> anyhow::Result<()> {
         .await
         .context("fetching latest release")?;
 
-    let manifest_name = format!("manifest-{}.json", config.channel());
+    let manifest_name = format!("manifest-{}.json", config.ensure_channel());
 
     let manifest_asset = release
         .assets
