@@ -1,19 +1,21 @@
 use std::process::Command;
 
-use crate::Config;
+use crate::{Config, manifest};
 
 #[derive(Debug, clap::Parser)]
 pub struct Args {
     pub tool: Option<String>,
 }
 
-fn print_tool(tool: &crate::tools::Tool, config: &Config) -> anyhow::Result<()> {
+fn print_tool(tool: &crate::manifest::Tool, config: &Config) -> anyhow::Result<()> {
     println!("bin path: {}", tool.bin_path(config).display());
 
     println!(
         "github repo: https://github.com/{}/{}",
         tool.repo_owner, tool.repo_name
     );
+
+    println!("required version: {}", tool.version);
 
     let version = Command::new(tool.bin_path(config))
         .arg(tool.version_cmd())
@@ -27,17 +29,16 @@ fn print_tool(tool: &crate::tools::Tool, config: &Config) -> anyhow::Result<()> 
         version
     };
 
-    println!("version: {}", version);
+    println!("installed version: {}", version);
 
     Ok(())
 }
 
 pub async fn run(_args: &Args, config: &Config) -> anyhow::Result<()> {
-    // for each tool, trigger a shell command to print the version
-    for tool in crate::tools::all_tools().await? {
+    let manifest = manifest::load_manifest(config, false).await?;
+
+    for tool in manifest.tools() {
         println!("{}: {}", tool.name, tool.description);
-        println!("min version: {}", tool.min_version);
-        println!("max version: {}", tool.max_version);
 
         let ok = print_tool(&tool, config);
 

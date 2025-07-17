@@ -3,19 +3,20 @@ use std::path::PathBuf;
 use anyhow::{Context, Result};
 use clap::{Parser, Subcommand};
 
+mod bin;
 mod cmds;
+mod manifest;
 mod perm_path;
-mod tools;
 
 pub const BANNER: &str = color_print::cstr! {
-    r#"
+r#"
 <#FFFFFF>████████╗</#FFFFFF><#999999>██╗  ██╗</#999999><#FF007F>██████╗ </#FF007F>
 <#FFFFFF>╚══██╔══╝</#FFFFFF><#999999>╚██╗██╔╝</#999999><#FF007F>╚════██╗</#FF007F>
 <#FFFFFF>   ██║   </#FFFFFF><#999999> ╚███╔╝ </#999999><#FF007F> █████╔╝</#FF007F>
 <#FFFFFF>   ██║   </#FFFFFF><#999999> ██╔██╗ </#999999><#FF007F> ╚═══██╗</#FF007F>
 <#FFFFFF>   ██║   </#FFFFFF><#999999>██╔╝ ██╗</#999999><#FF007F>██████╔╝</#FF007F>
 <#FFFFFF>   ╚═╝   </#FFFFFF><#999999>╚═╝  ╚═╝</#999999><#FF007F>╚═════╝ </#FF007F>"#
-    };
+};
 #[derive(Parser)]
 #[command(author, version, about, long_about = Some(BANNER))]
 struct Cli {
@@ -80,13 +81,13 @@ impl Config {
         self.channel_dir().join("bin")
     }
 
-    pub fn versions_file(&self) -> PathBuf {
-        self.root_dir().join("versions.json")
+    pub fn manifest_file(&self) -> PathBuf {
+        self.channel_dir().join("manifest.json")
     }
 }
 
 #[tokio::main]
-async fn main() -> Result<()> {
+async fn main() -> anyhow::Result<()> {
     let cli = Cli::parse();
 
     let config = Config {
@@ -94,8 +95,8 @@ async fn main() -> Result<()> {
         channel: cli.channel,
     };
 
-    println!("\n {}\n", BANNER.trim_start());
-    
+    println!("\n{}\n", BANNER.trim_start());
+
     if let Some(command) = cli.command {
         match command {
             Commands::Install(args) => cmds::install::run(&args, &config).await?,

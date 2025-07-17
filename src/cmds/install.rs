@@ -3,16 +3,22 @@ use clap::Parser;
 use flate2::read::GzDecoder;
 use octocrab::Octocrab;
 use octocrab::models::repos::Asset;
+use octocrab::models::repos::Release;
 use reqwest::Client;
+use semver::Version;
+use semver::VersionReq;
+use serde::{Deserialize, Serialize};
 use std::fs;
 use std::io::Write;
 use std::path::Path;
 use std::path::PathBuf;
 use tar::Archive;
+use tokio::process::Command;
 use xz2::read::XzDecoder;
-use serde::{Deserialize, Serialize};
 
-use crate::{Config, tools::*};
+use crate::bin;
+use crate::manifest;
+use crate::{Config, manifest::*};
 
 #[derive(Parser, Default)]
 pub struct Args {
@@ -111,7 +117,7 @@ fn extract_binary(path: &Path, install_dir: &Path, tool_name: &str) -> Result<()
     Ok(())
 }
 
-fn find_arch_asset<'a>(tool_name: &str, assets: &'a [Asset]) -> Option<&'a Asset> {
+fn find_arch_asset(tool_name: &str, release: Release) -> Option<Asset> {
     let arch = std::env::consts::ARCH;
     let os = std::env::consts::OS;
 
@@ -130,48 +136,24 @@ fn find_arch_asset<'a>(tool_name: &str, assets: &'a [Asset]) -> Option<&'a Asset
     };
 
     let target = format!("{}-{}-{}", tool_name, arch, os);
-    assets.iter().find(|asset| asset.name.contains(&target))
+
+    release
+        .assets
+        .iter()
+        .find(|asset| asset.name.contains(&target))
+        .cloned()
 }
 
-pub async fn install_tool(tool: &Tool, current_version: &Option<String>, version: &Option<String>, config: &Config) -> Result<()> {
-    let new_version = version.clone().unwrap_or(tool.min_version.clone());
-
-    if let Some(current_version) = current_version {
-        if !version_compare(&new_version, current_version) {
-            println!("{} is up to date", tool.name);
-            return Ok(());
-        }
-    }
-
-    println!("A new version of {} is available! 🎉", tool.name);
-    println!("    Current version: {}", current_version.clone().unwrap_or("-".to_string()));
-    println!("    Latest version:  {}", new_version);
-    println!("\n> Installing...");
-
-    let octocrab = Octocrab::builder().build()?;
-    let owner = tool.repo_owner.clone();
-    let repo = tool.repo_name.clone();
-    let repo = octocrab.repos(owner, repo);
-    let releases = repo.releases();
-    
-    let release = releases.get_by_tag(&format!("v{}", new_version)).await
-        .map_err(|e| anyhow::anyhow!("Release not found: {}", e))?;
-
-    println!("> Found release: {}", release.tag_name);
-
-    // Find the binary asset
-    let binary_asset = find_arch_asset(&tool.name, &release.assets)
-        .context("No binary asset found for current platform")?;
-
-    println!("> Downloading binary: {}", binary_asset.name);
+pub async fn download_tool_from_asset(tool: &Tool, asset: &Asset, config: &Config) -> Result<()> {
+    println!("> Downloading binary: {}", asset.name);
 
     // Create installation directory
     let install_dir = config.bin_dir().clone();
     fs::create_dir_all(&install_dir)?;
 
     // Download the binary
-    let binary_path = install_dir.join(&binary_asset.name);
-    download_binary(binary_asset.browser_download_url.as_ref(), &binary_path).await?;
+    let binary_path = install_dir.join(&asset.name);
+    download_binary(asset.browser_download_url.as_ref(), &binary_path).await?;
 
     println!("> Extracting binary...");
     extract_binary(&binary_path, &install_dir, &tool.name)?;
@@ -189,84 +171,111 @@ pub async fn install_tool(tool: &Tool, current_version: &Option<String>, version
     Ok(())
 }
 
-fn version_compare(version_a: &str, version_b: &str) -> bool {
-    let parts_a: Vec<u32> = version_a
-        .split('.')
-        .filter_map(|s| s.parse().ok())
-        .collect();
-    
-    let parts_b: Vec<u32> = version_b
-        .split('.')
-        .filter_map(|s| s.parse().ok())
-        .collect();
-    
-    let max_len = parts_a.len().max(parts_b.len());
-    
-    for i in 0..max_len {
-        let a = parts_a.get(i).copied().unwrap_or(0);
-        let b = parts_b.get(i).copied().unwrap_or(0);
-        
-        if a > b {
-            return true;
-        } else if a < b {
-            return false;
+async fn find_matching_release(
+    tool: &Tool,
+    requested: &VersionReq,
+) -> anyhow::Result<Option<(Version, Release)>> {
+    let octocrab = Octocrab::builder().build()?;
+    let owner = tool.repo_owner.clone();
+    let repo = tool.repo_name.clone();
+    let repo = octocrab.repos(owner, repo);
+
+    let mut page = repo
+        .releases()
+        .list()
+        .send()
+        .await
+        .context("Failed to list releases")?;
+
+    for release in page.take_items() {
+        let sanitized = if release.tag_name.starts_with("v") {
+            release.tag_name[1..].to_string()
+        } else {
+            release.tag_name.clone()
+        };
+
+        let Ok(version) = Version::parse(&sanitized) else {
+            continue;
+        };
+
+        if requested.matches(&version) {
+            return Ok(Some((version, release)));
         }
     }
-    
-    false
+
+    Ok(None)
 }
 
-fn load_versions_file(config: &Config) -> Result<VersionsFile> {
-    let content = std::fs::read_to_string(config.versions_file())
-        .map_err(|e| anyhow::anyhow!("Failed to read versions file: {}", e))?;
-    
-    let versions: VersionsFile = serde_json::from_str(&content)
-        .map_err(|e| anyhow::anyhow!("Failed to parse versions file: {}", e))?;
+async fn find_installed_version(tool: &Tool, config: &Config) -> anyhow::Result<Option<Version>> {
+    if !bin::is_installed(tool, config).await? {
+        return Ok(None);
+    }
 
-    Ok(versions)
+    let current_version = bin::check_current_version(tool, config).await;
+
+    match current_version {
+        Ok(version) => Ok(Some(version)),
+        Err(_) => {
+            // if the version command fails, we assume there's something wrong with the
+            // binary and respond as if it wasn't installed
+            Ok(None)
+        }
+    }
 }
 
-fn update_versions_file(versions: VersionsFile, config: &Config) -> Result<()> {
-    let content = serde_json::to_string_pretty(&versions)
-        .map_err(|e| anyhow::anyhow!("Failed to serialize versions info: {}", e))?;
+async fn install_tool(tool: &Tool, requested: &VersionReq, config: &Config) -> anyhow::Result<()> {
+    println!("\n> Installing {} at version {}", tool.name, requested);
 
-    std::fs::write(config.versions_file(), content)
-        .map_err(|e| anyhow::anyhow!("Failed to write versions file: {}", e))?;
+    let Some((version, release)) = find_matching_release(tool, &requested).await? else {
+        return Err(anyhow::anyhow!("No release found for {}", tool.name));
+    };
+
+    let Some(asset) = find_arch_asset(&tool.name, release) else {
+        return Err(anyhow::anyhow!("No asset found for {}", tool.name));
+    };
+
+    println!("\nFound version of {} to install 🎉", tool.name);
+    println!("  Version: {version}");
+    println!("  Asset: {}", asset.name);
+
+    download_tool_from_asset(tool, &asset, config).await?;
 
     Ok(())
 }
 
 pub async fn run(args: &Args, config: &Config) -> anyhow::Result<()> {
-    let tools = match &args.tool {
-        Some(tool) => tool_by_name(tool).await?,
-        None => all_tools().await?,
+    let manifest = manifest::load_manifest(config, true).await?;
+
+    let to_install: Vec<_> = if let Some(filter) = &args.tool {
+        manifest.tools().filter(|x| x.name == *filter).collect()
+    } else {
+        manifest.tools().collect()
     };
 
-    if tools.is_empty() {
+    if to_install.is_empty() {
         return Err(anyhow::anyhow!("No tools found to install"));
     }
-    
-    let mut versions = load_versions_file(config)?;
 
-    for tool in &tools {
-        let mut current_version = None;
-        if let Some(t) = versions.tools.iter().find(|t| t.repo_name == tool.repo_name && t.repo_owner == tool.repo_owner) {
-            current_version = Some(t.version.clone());
-        }
-        install_tool(&tool, &current_version, &args.version, config).await?;
-    }
+    for tool in to_install.iter() {
+        let current = find_installed_version(tool, config).await?;
+        let requested = VersionReq::parse(&tool.version)?;
 
-    for tool in versions.tools.iter_mut() {
-        if let Some(t) = tools.iter().find(|t| t.repo_name == tool.repo_name && t.repo_owner == tool.repo_owner) {
-            if tool.version != t.min_version {
-                tool.version = t.min_version.clone();
+        if let Some(current) = current {
+            if requested.matches(&current) {
+                println!("\nYour version of {} is up to date 👌", tool.name);
+
+                continue;
+            } else {
+                println!("\nYour version of {} needs to be updated 😬", tool.name);
+                println!("  Current version: {current}");
+                println!("  Requested version: {requested}");
             }
+        } else {
+            println!("\nYour need to install {} 📦", tool.name);
         }
+
+        install_tool(tool, &requested, config).await?;
     }
-
-    update_versions_file(versions, config)?;
-
-    println!();
 
     Ok(())
 }
