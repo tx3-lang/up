@@ -13,7 +13,6 @@ use std::io::Write;
 use std::path::Path;
 use std::path::PathBuf;
 use tar::Archive;
-use tokio::process::Command;
 use xz2::read::XzDecoder;
 
 use crate::bin;

@@ -5,7 +5,6 @@ use serde::{Deserialize, Serialize};
 use std::{
     path::PathBuf,
     time::{Duration, SystemTime},
-    vec,
 };
 use tokio::fs;
 
@@ -36,49 +35,8 @@ pub struct Manifest {
 }
 
 impl Manifest {
-    pub fn tool_by_name(&self, name: &str) -> Option<&Tool> {
-        self.tools.iter().find(|tool| tool.name == name)
-    }
-
     pub fn tools(&self) -> impl Iterator<Item = &Tool> {
         self.tools.iter()
-    }
-}
-
-impl Default for Manifest {
-    fn default() -> Self {
-        Self {
-            tools: vec![
-                Tool {
-                    name: "trix".to_string(),
-                    description: "The tx3 package manager".to_string(),
-                    repo_owner: "tx3-lang".to_string(),
-                    repo_name: "trix".to_string(),
-                    version: "^0".to_string(),
-                },
-                Tool {
-                    name: "tx3-lsp".to_string(),
-                    description: "A language server for tx3".to_string(),
-                    repo_owner: "tx3-lang".to_string(),
-                    repo_name: "lsp".to_string(),
-                    version: "^0".to_string(),
-                },
-                Tool {
-                    name: "dolos".to_string(),
-                    description: "A lightweight Cardano data node".to_string(),
-                    repo_owner: "txpipe".to_string(),
-                    repo_name: "dolos".to_string(),
-                    version: "^0".to_string(),
-                },
-                Tool {
-                    name: "cshell".to_string(),
-                    description: "A terminal wallet for Cardano".to_string(),
-                    repo_owner: "txpipe".to_string(),
-                    repo_name: "cshell".to_string(),
-                    version: "^0".to_string(),
-                },
-            ],
-        }
     }
 }
 
