@@ -23,6 +23,7 @@ flate2 = "1.0"
 tar = "0.4"
 xz2 = "0.1.7"
 color-print = "0.3.7"
+semver = "1.0.26"
 
 # The profile that 'cargo dist' will build with
 [profile.dist]
