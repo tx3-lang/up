@@ -1,3 +1,5 @@
+use std::time::{Duration, SystemTime};
+
 use anyhow::Context as _;
 use semver::{Version, VersionReq};
 use serde::{Deserialize, Serialize};
@@ -81,7 +83,13 @@ async fn save_updates(updates: &[Update], config: &Config) -> anyhow::Result<()>
 }
 
 pub async fn clear_updates(config: &Config) -> anyhow::Result<()> {
-    fs::remove_file(config.updates_file())
+    let updates_file = config.updates_file();
+
+    if !updates_file.exists() {
+        return Ok(());
+    }
+
+    fs::remove_file(updates_file)
         .await
         .context("removing updates file")?;
 
@@ -97,9 +105,37 @@ pub async fn check_updates(manifest: &Manifest, config: &Config) -> anyhow::Resu
         }
     }
 
-    save_updates(&updates, config).await?;
+    if updates.is_empty() {
+        clear_updates(config).await?;
+    } else {
+        save_updates(&updates, config).await?;
+    }
 
     Ok(updates)
+}
+
+async fn check_updates_timestamp(config: &Config) -> anyhow::Result<Option<SystemTime>> {
+    let updates_file = config.updates_file();
+
+    if !updates_file.exists() {
+        return Ok(None);
+    }
+
+    let metadata = fs::metadata(updates_file)
+        .await
+        .context("getting updates file metadata")?;
+
+    let modified = metadata
+        .modified()
+        .context("getting updates file modified time")?;
+
+    Ok(Some(modified))
+}
+
+const UPDATES_STALE_THRESHOLD: Duration = Duration::from_secs(60 * 60 * 24);
+
+fn updates_are_stale(timestamp: Option<SystemTime>) -> bool {
+    timestamp.is_none() || timestamp.unwrap() < SystemTime::now() - UPDATES_STALE_THRESHOLD
 }
 
 pub async fn load_updates(
@@ -107,10 +143,16 @@ pub async fn load_updates(
     config: &Config,
     force_check: bool,
 ) -> anyhow::Result<Vec<Update>> {
+    let timestamp = check_updates_timestamp(config).await?;
+
+    if force_check || updates_are_stale(timestamp) {
+        check_updates(manifest, config).await?;
+    }
+
     let updates_file = config.updates_file();
 
-    if !updates_file.exists() || force_check {
-        check_updates(manifest, config).await?;
+    if !updates_file.exists() {
+        return Ok(vec![]);
     }
 
     let updates = fs::read_to_string(updates_file)

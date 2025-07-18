@@ -3,24 +3,15 @@ use std::path::PathBuf;
 use anyhow::{Context, Result};
 use clap::{Parser, Subcommand};
 
+mod banner;
 mod bin;
 mod cmds;
 mod manifest;
 mod perm_path;
 mod updates;
 
-pub const BANNER: &str = color_print::cstr! {
-r#"
-<#FFFFFF>████████╗</#FFFFFF><#999999>██╗  ██╗</#999999><#FF007F>██████╗ </#FF007F>
-<#FFFFFF>╚══██╔══╝</#FFFFFF><#999999>╚██╗██╔╝</#999999><#FF007F>╚════██╗</#FF007F>
-<#FFFFFF>   ██║   </#FFFFFF><#999999> ╚███╔╝ </#999999><#FF007F> █████╔╝</#FF007F>
-<#FFFFFF>   ██║   </#FFFFFF><#999999> ██╔██╗ </#999999><#FF007F> ╚═══██╗</#FF007F>
-<#FFFFFF>   ██║   </#FFFFFF><#999999>██╔╝ ██╗</#999999><#FF007F>██████╔╝</#FF007F>
-<#FFFFFF>   ╚═╝   </#FFFFFF><#999999>╚═╝  ╚═╝</#999999><#FF007F>╚═════╝ </#FF007F>"#
-};
-
 #[derive(Parser)]
-#[command(author, version, about, long_about = Some(BANNER))]
+#[command(author, version, about, long_about = Some(banner::BANNER))]
 struct Cli {
     #[arg(global = true, short, long, env = "TX3_ROOT")]
     root_dir: Option<PathBuf>,
@@ -45,6 +36,22 @@ enum Commands {
     Use(cmds::r#use::Args),
     /// Show the version of the tx3 toolchain
     Show(cmds::show::Args),
+}
+
+pub trait ArgsCommon {
+    fn skip_banner(&self) -> bool;
+}
+
+impl Commands {
+    fn skip_banner(&self) -> bool {
+        match self {
+            Commands::Install(x) => x.skip_banner(),
+            Commands::Check(x) => x.skip_banner(),
+            Commands::Use(x) => x.skip_banner(),
+            Commands::Show(x) => x.skip_banner(),
+            Commands::Uninstall => true,
+        }
+    }
 }
 
 pub struct Config {
@@ -101,7 +108,8 @@ impl Config {
             std::fs::remove_file(&fixed_channel_dir)?;
         }
 
-        // Create new symlink
+        std::fs::create_dir_all(&channel_dir)?;
+
         std::os::unix::fs::symlink(&channel_dir, &fixed_channel_dir)?;
 
         Ok(())
@@ -124,8 +132,7 @@ impl Config {
     pub fn ensure_channel(&self) -> String {
         match self.channel() {
             Ok(channel) => channel,
-            Err(e) => {
-                eprintln!("Error getting channel: {}", e);
+            Err(_) => {
                 self.set_fixed_channel("stable").unwrap();
                 "stable".to_string()
             }
@@ -159,11 +166,11 @@ async fn main() -> anyhow::Result<()> {
         channel: cli.channel,
     };
 
-    println!("\n{}\n", BANNER.trim_start());
+    let skip_banner = cli.command.as_ref().map_or(false, |c| c.skip_banner());
 
-    println!("root dir: {}", config.root_dir().display());
-    println!("current channel: {}", config.ensure_channel());
-    println!();
+    if !skip_banner {
+        banner::print_banner(&config);
+    }
 
     if let Some(command) = cli.command {
         match command {
@@ -175,7 +182,6 @@ async fn main() -> anyhow::Result<()> {
         }
     } else {
         cmds::install::run(&cmds::install::Args::default(), &config).await?;
-        cmds::r#use::run(&cmds::r#use::Args::default(), &config).await?;
     }
 
     Ok(())

@@ -15,13 +15,21 @@ use std::path::PathBuf;
 use tar::Archive;
 use xz2::read::XzDecoder;
 
+use crate::ArgsCommon;
 use crate::manifest;
 use crate::updates;
 use crate::{Config, manifest::*};
 
 #[derive(Parser, Default)]
 pub struct Args {
+    #[arg(short, long)]
     release: Option<String>,
+}
+
+impl ArgsCommon for Args {
+    fn skip_banner(&self) -> bool {
+        false
+    }
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
