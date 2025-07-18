@@ -1,0 +1,293 @@
+name: E2E Tests
+
+on:
+  workflow_dispatch:
+    inputs:
+      release_tag:
+        description: 'GitHub release tag to test (e.g., v0.4.2)'
+        required: true
+        type: string
+      test_channel:
+        description: 'TX3 channel to test'
+        required: false
+        default: 'stable'
+        type: choice
+        options:
+        - stable
+        - nightly
+        - beta
+
+env:
+  CARGO_TERM_COLOR: always
+
+jobs:
+  # Download tx3up binaries from GitHub releases
+  download-binaries:
+    name: Download tx3up (${{ matrix.os }}-${{ matrix.arch }})
+    runs-on: ubuntu-latest
+    
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          # Ubuntu Intel
+          - os: ubuntu
+            arch: intel
+            asset_pattern: "*x86_64-unknown-linux-gnu*"
+            artifact_name: tx3up-ubuntu-intel
+          
+          # Ubuntu ARM
+          - os: ubuntu
+            arch: arm
+            asset_pattern: "*aarch64-unknown-linux-gnu*"
+            artifact_name: tx3up-ubuntu-arm
+          
+          # macOS Intel
+          - os: mac
+            arch: intel
+            asset_pattern: "*x86_64-apple-darwin*"
+            artifact_name: tx3up-mac-intel
+          
+          # macOS ARM
+          - os: mac
+            arch: arm
+            asset_pattern: "*aarch64-apple-darwin*"
+            artifact_name: tx3up-mac-arm
+    
+    steps:
+    - name: Download release asset
+      env:
+        GH_TOKEN: ${{ github.token }}
+      run: |
+        echo "Downloading tx3up ${{ inputs.release_tag }} for ${{ matrix.os }}-${{ matrix.arch }}"
+        
+        # Create target directory
+        mkdir -p target/release
+        
+        # List available assets first
+        echo "Available assets for ${{ inputs.release_tag }}:"
+        gh release view ${{ inputs.release_tag }} --repo ${{ github.repository }} --json assets --jq '.assets[].name'
+        
+        # Download the asset using GitHub CLI
+        echo "Downloading assets matching pattern: ${{ matrix.asset_pattern }}"
+        gh release download ${{ inputs.release_tag }} \
+          --repo ${{ github.repository }} \
+          --pattern "${{ matrix.asset_pattern }}" \
+          --dir target/release/
+        
+        # List what was downloaded
+        echo "Downloaded files:"
+        ls -la target/release/
+        
+        # Find the downloaded file and extract if it's an archive
+        downloaded_file=$(find target/release -type f \( -name "*.tar.gz" -o -name "*.tar.xz" -o -name "*.zip" -o -name "*${{ matrix.os }}*${{ matrix.arch }}*" -o -name "*$(echo "${{ matrix.asset_pattern }}" | tr -d '*')*" \) | head -1)
+        
+        if [[ -z "$downloaded_file" ]]; then
+          echo "Error: No suitable file found for ${{ matrix.os }}-${{ matrix.arch }}"
+          echo "Available files:"
+          ls -la target/release/
+          exit 1
+        fi
+        
+        echo "Processing file: $downloaded_file"
+        
+        # Extract archives or handle direct binaries
+        if [[ "$downloaded_file" == *.tar.gz ]]; then
+          echo "Extracting tar.gz archive..."
+          tar -xzf "$downloaded_file" -C target/release/
+          rm "$downloaded_file"
+        elif [[ "$downloaded_file" == *.tar.xz ]]; then
+          echo "Extracting tar.xz archive..."
+          tar -xJf "$downloaded_file" -C target/release/
+          rm "$downloaded_file"
+        elif [[ "$downloaded_file" == *.zip ]]; then
+          echo "Extracting zip archive..."
+          unzip "$downloaded_file" -d target/release/
+          rm "$downloaded_file"
+        else
+          echo "File appears to be a direct binary"
+        fi
+        
+        # Find the tx3up binary
+        tx3up_binary=$(find target/release -name "tx3up" -type f -executable 2>/dev/null | head -1)
+        if [[ -z "$tx3up_binary" ]]; then
+          # Try without executable check (some extracted files might not have exec bit set)
+          tx3up_binary=$(find target/release -name "tx3up" -type f | head -1)
+        fi
+        
+        if [[ -z "$tx3up_binary" ]]; then
+          echo "Error: tx3up binary not found after extraction"
+          echo "Contents after extraction/download:"
+          find target/release -type f -exec ls -la {} \;
+          exit 1
+        fi
+        
+        echo "Found tx3up binary at: $tx3up_binary"
+        
+        # Move binary to standard location and make executable
+        if [[ "$tx3up_binary" != "target/release/tx3up" ]]; then
+          mv "$tx3up_binary" target/release/tx3up
+        fi
+        chmod +x target/release/tx3up
+        
+        echo "Successfully prepared tx3up binary"
+    
+    - name: Verify binary
+      run: |
+        ls -la target/release/tx3up
+        file target/release/tx3up
+        ./target/release/tx3up --version || echo "Version check failed, but binary exists"
+    
+    - name: Upload binary artifact
+      uses: actions/upload-artifact@v4
+      with:
+        name: ${{ matrix.artifact_name }}
+        path: target/release/tx3up
+        retention-days: 1
+    
+  # Run E2E tests using the downloaded binaries
+  e2e-tests:
+    name: E2E Tests (${{ matrix.os }}-${{ matrix.arch }}, ${{ matrix.test }})
+    runs-on: ${{ matrix.runner }}
+    needs: download-binaries
+    
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          # Ubuntu Intel tests
+          - os: ubuntu
+            arch: intel
+            runner: ubuntu-latest
+            artifact_name: tx3up-ubuntu-intel
+            test: fresh_install
+          - os: ubuntu
+            arch: intel
+            runner: ubuntu-latest
+            artifact_name: tx3up-ubuntu-intel
+            test: update_install
+          
+          # Ubuntu ARM tests
+          - os: ubuntu
+            arch: arm
+            runner: ubuntu-latest
+            artifact_name: tx3up-ubuntu-arm
+            test: fresh_install
+          - os: ubuntu
+            arch: arm
+            runner: ubuntu-latest
+            artifact_name: tx3up-ubuntu-arm
+            test: update_install
+          
+          # macOS Intel tests
+          - os: mac
+            arch: intel
+            runner: macos-13
+            artifact_name: tx3up-mac-intel
+            test: fresh_install
+          - os: mac
+            arch: intel
+            runner: macos-13
+            artifact_name: tx3up-mac-intel
+            test: update_install
+          
+          # macOS ARM tests
+          - os: mac
+            arch: arm
+            runner: macos-latest
+            artifact_name: tx3up-mac-arm
+            test: fresh_install
+          - os: mac
+            arch: arm
+            runner: macos-latest
+            artifact_name: tx3up-mac-arm
+            test: update_install
+    
+    steps:
+    - name: Checkout code
+      uses: actions/checkout@v4
+    
+    - name: Download tx3up binary
+      uses: actions/download-artifact@v4
+      with:
+        name: ${{ matrix.artifact_name }}
+        path: target/release/
+    
+    - name: Make binary executable
+      run: chmod +x target/release/tx3up
+    
+    - name: Verify binary
+      run: |
+        ls -la target/release/tx3up
+        file target/release/tx3up
+    
+    - name: Install jq (for JSON validation)
+      run: |
+        if [[ "${{ matrix.os }}" == "ubuntu" ]]; then
+          sudo apt-get update && sudo apt-get install -y jq
+        elif [[ "${{ matrix.os }}" == "mac" ]]; then
+          brew install jq
+        fi
+    
+    - name: Run E2E test - ${{ matrix.test }}
+      run: |
+        echo "Running ${{ matrix.test }} test on ${{ matrix.os }}-${{ matrix.arch }}"
+        echo "Testing release: ${{ inputs.release_tag }}"
+        echo "Testing channel: ${{ inputs.test_channel }}"
+        ./tests/e2e/${{ matrix.test }}.sh
+      env:
+        # Use a unique root directory for each test run
+        TX3_ROOT_DIR: ${{ github.workspace }}/test-root-${{ matrix.os }}-${{ matrix.arch }}-${{ matrix.test }}
+        TX3_CHANNEL: ${{ inputs.test_channel }}
+    
+    - name: Upload test artifacts on failure
+      if: failure()
+      uses: actions/upload-artifact@v4
+      with:
+        name: test-artifacts-${{ matrix.os }}-${{ matrix.arch }}-${{ matrix.test }}
+        path: |
+          ${{ github.workspace }}/test-root-*/
+          target/release/tx3up
+        retention-days: 7
+    
+    - name: Display test summary
+      if: always()
+      run: |
+        echo "## E2E Test Summary" >> $GITHUB_STEP_SUMMARY
+        echo "- **Release**: ${{ inputs.release_tag }}" >> $GITHUB_STEP_SUMMARY
+        echo "- **OS**: ${{ matrix.os }}" >> $GITHUB_STEP_SUMMARY
+        echo "- **Architecture**: ${{ matrix.arch }}" >> $GITHUB_STEP_SUMMARY
+        echo "- **Test**: ${{ matrix.test }}" >> $GITHUB_STEP_SUMMARY
+        echo "- **Channel**: ${{ inputs.test_channel }}" >> $GITHUB_STEP_SUMMARY
+        echo "- **Runner**: ${{ matrix.runner }}" >> $GITHUB_STEP_SUMMARY
+        if [[ "${{ job.status }}" == "success" ]]; then
+          echo "- **Result**: ✅ PASSED" >> $GITHUB_STEP_SUMMARY
+        else
+          echo "- **Result**: ❌ FAILED" >> $GITHUB_STEP_SUMMARY
+        fi
+
+  # Summary job that depends on all matrix jobs
+  e2e-summary:
+    name: E2E Tests Summary
+    runs-on: ubuntu-latest
+    needs: [download-binaries, e2e-tests]
+    if: always()
+    
+    steps:
+    - name: Check test results
+      run: |
+        echo "## Overall E2E Test Results" >> $GITHUB_STEP_SUMMARY
+        echo "**Tested Release**: ${{ inputs.release_tag }}" >> $GITHUB_STEP_SUMMARY
+        echo "**Tested Channel**: ${{ inputs.test_channel }}" >> $GITHUB_STEP_SUMMARY
+        echo "" >> $GITHUB_STEP_SUMMARY
+        if [[ "${{ needs.e2e-tests.result }}" == "success" ]]; then
+          echo "🎉 All E2E tests passed!" >> $GITHUB_STEP_SUMMARY
+          echo "📦 Downloaded binaries for all platforms successfully" >> $GITHUB_STEP_SUMMARY
+          exit 0
+        else
+          echo "❌ Some tests failed. Check individual job results for details." >> $GITHUB_STEP_SUMMARY
+          if [[ "${{ needs.download-binaries.result }}" != "success" ]]; then
+            echo "📥 Binary download stage failed" >> $GITHUB_STEP_SUMMARY
+          fi
+          exit 1
+        fi
