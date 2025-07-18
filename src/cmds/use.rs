@@ -1,14 +1,17 @@
-use anyhow::Result;
 use clap::Parser;
-use std::os::unix::fs::symlink;
-use std::{fs, path::Path};
 
-use crate::{Config, perm_path};
+use crate::{ArgsCommon, Config, perm_path};
 
 #[derive(Parser)]
 pub struct Args {
     #[arg(default_value = "stable")]
     pub new_channel: String,
+}
+
+impl ArgsCommon for Args {
+    fn skip_banner(&self) -> bool {
+        false
+    }
 }
 
 impl Default for Args {

@@ -1,10 +1,16 @@
 use std::process::Command;
 
-use crate::{Config, manifest};
+use crate::{ArgsCommon, Config, manifest};
 
 #[derive(Debug, clap::Parser)]
 pub struct Args {
     pub tool: Option<String>,
+}
+
+impl ArgsCommon for Args {
+    fn skip_banner(&self) -> bool {
+        false
+    }
 }
 
 fn print_tool(tool: &crate::manifest::Tool, config: &Config) -> anyhow::Result<()> {
