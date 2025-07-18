@@ -35,7 +35,7 @@ fn print_tool(tool: &crate::manifest::Tool, config: &Config) -> anyhow::Result<(
 }
 
 pub async fn run(_args: &Args, config: &Config) -> anyhow::Result<()> {
-    let manifest = manifest::load_manifest(config, false).await?;
+    let manifest = manifest::load_latest_manifest(config, false).await?;
 
     for tool in manifest.tools() {
         println!("{}: {}", tool.name, tool.description);

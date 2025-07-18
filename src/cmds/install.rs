@@ -21,8 +21,7 @@ use crate::{Config, manifest::*};
 
 #[derive(Parser, Default)]
 pub struct Args {
-    pub tool: Option<String>,
-    pub version: Option<String>,
+    release: Option<String>,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -224,8 +223,11 @@ async fn install_tool(tool: &Tool, requested: &VersionReq, config: &Config) -> a
     Ok(())
 }
 
-pub async fn run(_args: &Args, config: &Config) -> anyhow::Result<()> {
-    let manifest = manifest::load_manifest(config, true).await?;
+pub async fn run(args: &Args, config: &Config) -> anyhow::Result<()> {
+    let manifest = match &args.release {
+        Some(release) => manifest::load_tagged_manifest(config, release).await?,
+        None => manifest::load_latest_manifest(config, true).await?,
+    };
 
     let updates = updates::check_updates(&manifest, config).await?;
 

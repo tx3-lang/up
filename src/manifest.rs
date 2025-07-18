@@ -1,5 +1,5 @@
 use anyhow::Context;
-use octocrab::Octocrab;
+use octocrab::{Octocrab, models::repos::Release, repos::RepoHandler};
 use reqwest::Client;
 use serde::{Deserialize, Serialize};
 use std::{
@@ -54,18 +54,35 @@ async fn fetch_manifest_content(url: &str) -> anyhow::Result<String> {
     Ok(data)
 }
 
-pub async fn download_remote_manifest(config: &Config) -> anyhow::Result<()> {
+async fn define_release(
+    repo: &RepoHandler<'_>,
+    explicit_tag: Option<&str>,
+) -> anyhow::Result<Release> {
+    if let Some(explicit) = explicit_tag {
+        return repo
+            .releases()
+            .get_by_tag(explicit)
+            .await
+            .context("fetching release");
+    } else {
+        repo.releases()
+            .get_latest()
+            .await
+            .context("fetching latest release")
+    }
+}
+
+pub async fn download_remote_manifest(
+    config: &Config,
+    explicit_tag: Option<&str>,
+) -> anyhow::Result<()> {
     let octocrab = Octocrab::builder()
         .build()
-        .map_err(|e| anyhow::anyhow!("Failed to create Octocrab client: {}", e))?;
+        .context("building octocrab client")?;
 
     let repo = octocrab.repos("tx3-lang", "toolchain");
 
-    let release = repo
-        .releases()
-        .get_latest()
-        .await
-        .context("fetching latest release")?;
+    let release = define_release(&repo, explicit_tag).await?;
 
     let manifest_name = format!("manifest-{}.json", config.ensure_channel());
 
@@ -134,12 +151,25 @@ fn manifest_is_stale(timestamp: Option<SystemTime>) -> bool {
     timestamp.is_none() || timestamp.unwrap() < SystemTime::now() - MANIFEST_STALE_THRESHOLD
 }
 
-pub async fn load_manifest(config: &Config, force_download: bool) -> anyhow::Result<Manifest> {
+pub async fn load_latest_manifest(
+    config: &Config,
+    force_download: bool,
+) -> anyhow::Result<Manifest> {
     let timestamp = check_manifest_timestamp(config).await?;
 
     if manifest_is_stale(timestamp) || force_download {
-        download_remote_manifest(config).await?;
+        download_remote_manifest(config, None).await?;
     }
+
+    let manifest = load_local_manifest(config)
+        .await?
+        .ok_or(anyhow::anyhow!("Manifest file should exist"))?;
+
+    Ok(manifest)
+}
+
+pub async fn load_tagged_manifest(config: &Config, explicit_tag: &str) -> anyhow::Result<Manifest> {
+    download_remote_manifest(config, Some(explicit_tag)).await?;
 
     let manifest = load_local_manifest(config)
         .await?
