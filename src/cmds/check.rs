@@ -29,7 +29,7 @@ fn print_update(update: &updates::Update, manifest: &manifest::Manifest) -> anyh
 }
 
 pub async fn run(args: &Args, config: &Config) -> anyhow::Result<()> {
-    let manifest = manifest::load_manifest(config, args.force).await?;
+    let manifest = manifest::load_latest_manifest(config, args.force).await?;
 
     let updates = updates::load_updates(&manifest, config, args.force).await?;
 
