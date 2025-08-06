@@ -8,17 +8,15 @@ use crate::{Config, manifest::Tool};
 pub async fn run_version_cmd(tool: &Tool, config: &Config) -> anyhow::Result<String> {
     let version = tool.version_cmd();
 
-    let output = Command::new(tool.bin_path(config))
+    let bin_path = tool.bin_path(config);
+
+    let output = Command::new(bin_path)
         .arg(version)
         .output()
         .await
         .context("running version command")?;
 
     String::from_utf8(output.stdout).context("parsing version output")
-}
-
-pub async fn is_installed(tool: &Tool, config: &Config) -> anyhow::Result<bool> {
-    Ok(tool.bin_path(config).exists())
 }
 
 pub async fn check_current_version(tool: &Tool, config: &Config) -> anyhow::Result<Version> {

@@ -31,6 +31,9 @@ pub struct Tool {
     pub version: String,
 
     #[serde(default)]
+    pub is_global: bool,
+
+    #[serde(default)]
     pub instructions: String,
 
     #[serde(default)]
@@ -39,7 +42,11 @@ pub struct Tool {
 
 impl Tool {
     pub fn bin_path(&self, config: &Config) -> PathBuf {
-        config.bin_dir().join(self.name.clone())
+        if self.is_global {
+            self.name.clone().into()
+        } else {
+            config.bin_dir().join(self.name.clone())
+        }
     }
 
     pub fn version_cmd(&self) -> String {

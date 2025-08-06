@@ -34,10 +34,6 @@ impl Update {
 }
 
 async fn find_installed_version(tool: &Tool, config: &Config) -> anyhow::Result<Option<Version>> {
-    if !bin::is_installed(tool, config).await? {
-        return Ok(None);
-    }
-
     let current_version = bin::check_current_version(tool, config).await;
 
     match current_version {
