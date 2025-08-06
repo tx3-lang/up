@@ -11,12 +11,30 @@ use tokio::fs;
 use crate::Config;
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
+pub enum Installer {
+    GithubRelease,
+    Instructions,
+}
+
+impl Default for Installer {
+    fn default() -> Self {
+        Self::GithubRelease
+    }
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct Tool {
     pub name: String,
     pub description: String,
     pub repo_owner: String,
     pub repo_name: String,
     pub version: String,
+
+    #[serde(default)]
+    pub instructions: String,
+
+    #[serde(default)]
+    pub installer: Installer,
 }
 
 impl Tool {
@@ -31,16 +49,18 @@ impl Tool {
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct Manifest {
+    #[serde(rename = "self")]
+    self_: Option<Tool>,
     tools: Vec<Tool>,
 }
 
 impl Manifest {
     pub fn tools(&self) -> impl Iterator<Item = &Tool> {
-        self.tools.iter()
+        self.self_.iter().chain(self.tools.iter())
     }
 
     pub fn tool_by_name(&self, name: &str) -> Option<&Tool> {
-        self.tools.iter().find(|tool| tool.name == name)
+        self.tools().find(|tool| tool.name == name)
     }
 }
 

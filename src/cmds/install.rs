@@ -22,7 +22,7 @@ use crate::{Config, manifest::*};
 
 #[derive(Parser, Default)]
 pub struct Args {
-    #[arg(short, long)]
+    #[arg(long)]
     release: Option<String>,
 }
 
@@ -211,7 +211,11 @@ async fn find_matching_release(
     Ok(None)
 }
 
-async fn install_tool(tool: &Tool, requested: &VersionReq, config: &Config) -> anyhow::Result<()> {
+async fn run_github_release_installer(
+    tool: &Tool,
+    requested: &VersionReq,
+    config: &Config,
+) -> anyhow::Result<()> {
     println!("\n> Installing {} at version {}", tool.name, requested);
 
     let Some((version, release)) = find_matching_release(tool, requested).await? else {
@@ -229,6 +233,30 @@ async fn install_tool(tool: &Tool, requested: &VersionReq, config: &Config) -> a
     download_tool_from_asset(tool, &asset, config).await?;
 
     Ok(())
+}
+
+async fn run_instructions_installer(
+    tool: &Tool,
+    requested: &VersionReq,
+    _: &Config,
+) -> anyhow::Result<()> {
+    println!(
+        "\n> Please follow the instructions to install {} at version {}",
+        tool.name, requested
+    );
+
+    println!();
+    println!("  {}", tool.instructions);
+    println!();
+
+    Ok(())
+}
+
+async fn install_tool(tool: &Tool, requested: &VersionReq, config: &Config) -> anyhow::Result<()> {
+    match tool.installer {
+        Installer::GithubRelease => run_github_release_installer(tool, requested, config).await,
+        Installer::Instructions => run_instructions_installer(tool, requested, config).await,
+    }
 }
 
 pub async fn run(args: &Args, config: &Config) -> anyhow::Result<()> {
@@ -262,7 +290,7 @@ pub async fn run(args: &Args, config: &Config) -> anyhow::Result<()> {
     let after = updates::check_updates(&manifest, config).await?;
 
     if !after.is_empty() {
-        println!("Seems that you still have updates to install, please run `tx3up install` again",);
+        println!("Seems that you still have updates to install",);
     }
 
     Ok(())
