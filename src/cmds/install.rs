@@ -17,6 +17,7 @@ use xz2::read::XzDecoder;
 
 use crate::ArgsCommon;
 use crate::manifest;
+use crate::perm_path;
 use crate::updates;
 use crate::{Config, manifest::*};
 
@@ -292,6 +293,8 @@ pub async fn run(args: &Args, config: &Config) -> anyhow::Result<()> {
     if !after.is_empty() {
         println!("Seems that you still have updates to install",);
     }
+
+    perm_path::check_or_update(config)?;
 
     Ok(())
 }
