@@ -12,6 +12,7 @@ enum KnownShell {
     Posix,
     Bash,
     Zsh,
+    Fish,
 }
 
 impl KnownShell {
@@ -20,12 +21,18 @@ impl KnownShell {
             KnownShell::Posix => vec![".profile"],
             KnownShell::Bash => vec![".bash_profile", ".bash_login", ".bashrc"],
             KnownShell::Zsh => vec![".zshrc"],
+            KnownShell::Fish => vec![".config/fish/config.fish"],
         }
     }
 }
 
 fn known_shells() -> Vec<KnownShell> {
-    vec![KnownShell::Posix, KnownShell::Bash, KnownShell::Zsh]
+    vec![
+        KnownShell::Posix,
+        KnownShell::Bash,
+        KnownShell::Zsh,
+        KnownShell::Fish,
+    ]
 }
 
 fn source_cmd(root_dir: &Path) -> String {
@@ -36,6 +43,19 @@ export PATH="$TX3_ROOT/default/bin:$PATH"
 "#,
         root_dir.to_str().unwrap()
     )
+}
+
+fn source_cmd_for_shell(shell: &KnownShell, root_dir: &Path) -> String {
+    match shell {
+        KnownShell::Fish => format!(
+            r#"
+set -gx TX3_ROOT "{}"
+set -gx PATH "$TX3_ROOT/default/bin" $PATH
+"#,
+            root_dir.to_str().unwrap()
+        ),
+        _ => source_cmd(root_dir),
+    }
 }
 
 fn file_contains(profile_path: &Path, source_cmd: &str) -> bool {
@@ -62,7 +82,7 @@ fn append_file(profile_path: &Path, source_cmd: &str) -> anyhow::Result<()> {
 
 fn update_all_profiles(config: &Config) -> anyhow::Result<()> {
     for sh in known_shells() {
-        let source_cmd = source_cmd(&config.root_dir());
+        let source_cmd = source_cmd_for_shell(&sh, &config.root_dir());
 
         for rc in sh.rc_files() {
             let profile_path = dirs::home_dir()
