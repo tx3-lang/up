@@ -4,13 +4,17 @@ members = ["cargo:."]
 # Config for 'dist'
 [dist]
 # The preferred dist version to use in CI (Cargo.toml SemVer syntax)
-cargo-dist-version = "0.29.0"
+cargo-dist-version = "0.30.3"
 # CI backends to support
 ci = "github"
 # The installers to generate for each app
 installers = ["shell", "homebrew"]
 # Target platforms to build apps for (Rust target-triple syntax)
-targets = ["aarch64-apple-darwin", "aarch64-unknown-linux-gnu", "x86_64-apple-darwin", "x86_64-unknown-linux-gnu"]
+targets = [
+    "aarch64-apple-darwin",
+    "aarch64-unknown-linux-gnu",
+    "x86_64-unknown-linux-gnu",
+]
 # Which actions to run on pull requests
 pr-run-mode = "plan"
 # Whether to install an updater program
@@ -26,5 +30,4 @@ publish-jobs = ["homebrew"]
 global = "ubuntu-22.04"
 x86_64-unknown-linux-gnu = "ubuntu-22.04"
 aarch64-apple-darwin = "macos-14"
-x86_64-apple-darwin = "macos-13"
 aarch64-unknown-linux-gnu = "ubuntu-22.04-arm"
