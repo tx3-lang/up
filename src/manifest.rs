@@ -10,6 +10,18 @@ use tokio::fs;
 
 use crate::Config;
 
+pub fn build_octocrab() -> anyhow::Result<Octocrab> {
+    let mut builder = Octocrab::builder();
+
+    if let Ok(token) = std::env::var("GITHUB_TOKEN") {
+        if !token.is_empty() {
+            builder = builder.personal_token(token);
+        }
+    }
+
+    builder.build().context("building octocrab client")
+}
+
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub enum Installer {
     GithubRelease,
@@ -103,9 +115,7 @@ pub async fn download_remote_manifest(
     config: &Config,
     explicit_tag: Option<&str>,
 ) -> anyhow::Result<()> {
-    let octocrab = Octocrab::builder()
-        .build()
-        .context("building octocrab client")?;
+    let octocrab = build_octocrab()?;
 
     let repo = octocrab.repos("tx3-lang", "toolchain");
 

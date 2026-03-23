@@ -1,7 +1,6 @@
 use anyhow::{Context, Result};
 use clap::Parser;
 use flate2::read::GzDecoder;
-use octocrab::Octocrab;
 use octocrab::models::repos::Asset;
 use octocrab::models::repos::Release;
 use reqwest::Client;
@@ -181,7 +180,7 @@ async fn find_matching_release(
     tool: &Tool,
     requested: &VersionReq,
 ) -> anyhow::Result<Option<(Version, Release)>> {
-    let octocrab = Octocrab::builder().build()?;
+    let octocrab = crate::manifest::build_octocrab()?;
     let owner = tool.repo_owner.clone();
     let repo = tool.repo_name.clone();
     let repo = octocrab.repos(owner, repo);
