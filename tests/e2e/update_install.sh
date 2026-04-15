@@ -181,7 +181,7 @@ main() {
     fi
     
     # Verify that at least some binaries are still executable
-    executable_count=$(find "$TX3_ROOT/$TX3_CHANNEL/bin" -type f -executable 2>/dev/null | wc -l)
+    executable_count=$(find "$TX3_ROOT/$TX3_CHANNEL/bin" -type f -perm -u+x 2>/dev/null | wc -l)
     if [[ $executable_count -gt 0 ]]; then
         echo -e "${GREEN}✓ Found $executable_count executable binaries after update${NC}"
     else
