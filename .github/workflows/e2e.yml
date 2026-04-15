@@ -59,6 +59,7 @@ jobs:
     - name: Run E2E test - ${{ matrix.test }}
       env:
         TX3_CHANNEL: ${{ inputs.test_channel || 'stable' }}
+        GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
       run: ./tests/e2e/${{ matrix.test }}.sh
 
     - name: Upload test artifacts on failure
