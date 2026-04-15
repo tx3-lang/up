@@ -19,6 +19,9 @@ struct Cli {
     #[arg(global = true, short, long, env = "TX3_CHANNEL")]
     channel: Option<String>,
 
+    #[arg(global = true, long, env = "GITHUB_TOKEN", hide = true)]
+    github_token: Option<String>,
+
     #[command(subcommand)]
     command: Option<Commands>,
 }
@@ -57,9 +60,14 @@ impl Commands {
 pub struct Config {
     root_dir: Option<PathBuf>,
     channel: Option<String>,
+    github_token: Option<String>,
 }
 
 impl Config {
+    pub fn github_token(&self) -> Option<&str> {
+        self.github_token.as_deref().filter(|t| !t.is_empty())
+    }
+
     pub fn default_root_dir() -> Result<PathBuf> {
         let mut path = if cfg!(target_os = "windows") {
             dirs::data_local_dir()
@@ -164,6 +172,7 @@ async fn main() -> anyhow::Result<()> {
     let config = Config {
         root_dir: cli.root_dir,
         channel: cli.channel,
+        github_token: cli.github_token,
     };
 
     let skip_banner = cli.command.as_ref().map_or(false, |c| c.skip_banner());

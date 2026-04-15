@@ -179,8 +179,9 @@ pub async fn download_tool_from_asset(tool: &Tool, asset: &Asset, config: &Confi
 async fn find_matching_release(
     tool: &Tool,
     requested: &VersionReq,
+    config: &Config,
 ) -> anyhow::Result<Option<(Version, Release)>> {
-    let octocrab = crate::manifest::build_octocrab()?;
+    let octocrab = crate::manifest::build_octocrab(config)?;
     let owner = tool.repo_owner.clone();
     let repo = tool.repo_name.clone();
     let repo = octocrab.repos(owner, repo);
@@ -218,7 +219,7 @@ async fn run_github_release_installer(
 ) -> anyhow::Result<()> {
     println!("\n> Installing {} at version {}", tool.name, requested);
 
-    let Some((version, release)) = find_matching_release(tool, requested).await? else {
+    let Some((version, release)) = find_matching_release(tool, requested, config).await? else {
         return Err(anyhow::anyhow!("No release found for {}", tool.name));
     };
 
