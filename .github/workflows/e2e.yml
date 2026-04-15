@@ -237,7 +237,7 @@ jobs:
         ./tests/e2e/${{ matrix.test }}.sh
       env:
         # Use a unique root directory for each test run
-        TX3_ROOT_DIR: ${{ github.workspace }}/test-root-${{ matrix.os }}-${{ matrix.arch }}-${{ matrix.test }}
+        TX3_ROOT: ${{ github.workspace }}/test-root-${{ matrix.os }}-${{ matrix.arch }}-${{ matrix.test }}
         TX3_CHANNEL: ${{ inputs.test_channel }}
     
     - name: Upload test artifacts on failure

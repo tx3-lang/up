@@ -14,11 +14,11 @@ NC='\033[0m' # No Color
 # Test configuration
 TEST_NAME="update_install"
 TEMP_DIR=$(mktemp -d)
-export TX3_ROOT_DIR="$TEMP_DIR/tx3_test"
+export TX3_ROOT="$TEMP_DIR/tx3_test"
 export TX3_CHANNEL="${TX3_CHANNEL:-stable}"
 
 echo -e "${YELLOW}Starting $TEST_NAME test...${NC}"
-echo "TX3_ROOT_DIR: $TX3_ROOT_DIR"
+echo "TX3_ROOT: $TX3_ROOT"
 echo "TX3_CHANNEL: $TX3_CHANNEL"
 echo "Temp directory: $TEMP_DIR"
 
@@ -96,8 +96,8 @@ main() {
     echo -e "${YELLOW}Step 1: Performing initial installation${NC}"
     
     # Ensure clean state
-    if [[ -e "$TX3_ROOT_DIR" ]]; then
-        rm -rf "$TX3_ROOT_DIR"
+    if [[ -e "$TX3_ROOT" ]]; then
+        rm -rf "$TX3_ROOT"
     fi
     
     # Run initial installation
@@ -109,22 +109,22 @@ main() {
     echo -e "${GREEN}✓ Initial installation completed${NC}"
     
     # Verify initial installation
-    check_directory "$TX3_ROOT_DIR" "TX3 root directory"
-    check_directory "$TX3_ROOT_DIR/$TX3_CHANNEL" "Channel directory ($TX3_CHANNEL)"
-    check_directory "$TX3_ROOT_DIR/$TX3_CHANNEL/bin" "Binary directory"
-    check_file "$TX3_ROOT_DIR/$TX3_CHANNEL/manifest.json" "Manifest file"
+    check_directory "$TX3_ROOT" "TX3 root directory"
+    check_directory "$TX3_ROOT/$TX3_CHANNEL" "Channel directory ($TX3_CHANNEL)"
+    check_directory "$TX3_ROOT/$TX3_CHANNEL/bin" "Binary directory"
+    check_file "$TX3_ROOT/$TX3_CHANNEL/manifest.json" "Manifest file"
     
     echo -e "${YELLOW}Step 2: Recording initial state${NC}"
     
     # Record initial state
-    initial_manifest_mtime=$(get_file_mtime "$TX3_ROOT_DIR/$TX3_CHANNEL/manifest.json")
-    initial_bin_count=$(count_files "$TX3_ROOT_DIR/$TX3_CHANNEL/bin")
+    initial_manifest_mtime=$(get_file_mtime "$TX3_ROOT/$TX3_CHANNEL/manifest.json")
+    initial_bin_count=$(count_files "$TX3_ROOT/$TX3_CHANNEL/bin")
     
     echo "Initial manifest mtime: $initial_manifest_mtime"
     echo "Initial binary count: $initial_bin_count"
     
     # Create a test marker file to verify update behavior
-    test_marker="$TX3_ROOT_DIR/test_marker.txt"
+    test_marker="$TX3_ROOT/test_marker.txt"
     echo "test_marker_$(date +%s)" > "$test_marker"
     
     # Wait a moment to ensure different timestamps
@@ -143,10 +143,10 @@ main() {
     echo -e "${YELLOW}Step 4: Verifying update behavior${NC}"
     
     # Verify installation still exists and is functional
-    check_directory "$TX3_ROOT_DIR" "TX3 root directory (after update)"
-    check_directory "$TX3_ROOT_DIR/$TX3_CHANNEL" "Channel directory (after update)"
-    check_directory "$TX3_ROOT_DIR/$TX3_CHANNEL/bin" "Binary directory (after update)"
-    check_file "$TX3_ROOT_DIR/$TX3_CHANNEL/manifest.json" "Manifest file (after update)"
+    check_directory "$TX3_ROOT" "TX3 root directory (after update)"
+    check_directory "$TX3_ROOT/$TX3_CHANNEL" "Channel directory (after update)"
+    check_directory "$TX3_ROOT/$TX3_CHANNEL/bin" "Binary directory (after update)"
+    check_file "$TX3_ROOT/$TX3_CHANNEL/manifest.json" "Manifest file (after update)"
     
     # Check if our test marker still exists (should be preserved during update)
     if [[ -f "$test_marker" ]]; then
@@ -156,8 +156,8 @@ main() {
     fi
     
     # Record post-update state
-    updated_manifest_mtime=$(get_file_mtime "$TX3_ROOT_DIR/$TX3_CHANNEL/manifest.json")
-    updated_bin_count=$(count_files "$TX3_ROOT_DIR/$TX3_CHANNEL/bin")
+    updated_manifest_mtime=$(get_file_mtime "$TX3_ROOT/$TX3_CHANNEL/manifest.json")
+    updated_bin_count=$(count_files "$TX3_ROOT/$TX3_CHANNEL/bin")
     
     echo "Updated manifest mtime: $updated_manifest_mtime"
     echo "Updated binary count: $updated_bin_count"
@@ -181,7 +181,7 @@ main() {
     fi
     
     # Verify that at least some binaries are still executable
-    executable_count=$(find "$TX3_ROOT_DIR/$TX3_CHANNEL/bin" -type f -executable 2>/dev/null | wc -l)
+    executable_count=$(find "$TX3_ROOT/$TX3_CHANNEL/bin" -type f -executable 2>/dev/null | wc -l)
     if [[ $executable_count -gt 0 ]]; then
         echo -e "${GREEN}✓ Found $executable_count executable binaries after update${NC}"
     else
@@ -198,8 +198,8 @@ main() {
     fi
     
     # Verify installation is still intact
-    final_manifest_mtime=$(get_file_mtime "$TX3_ROOT_DIR/$TX3_CHANNEL/manifest.json")
-    final_bin_count=$(count_files "$TX3_ROOT_DIR/$TX3_CHANNEL/bin")
+    final_manifest_mtime=$(get_file_mtime "$TX3_ROOT/$TX3_CHANNEL/manifest.json")
+    final_bin_count=$(count_files "$TX3_ROOT/$TX3_CHANNEL/bin")
     
     if [[ $final_bin_count -eq $updated_bin_count ]]; then
         echo -e "${GREEN}✓ Idempotency test passed - binary count unchanged${NC}"
@@ -212,7 +212,7 @@ main() {
     echo -e "${GREEN}  - Initial binary count: $initial_bin_count${NC}"
     echo -e "${GREEN}  - Updated binary count: $updated_bin_count${NC}"
     echo -e "${GREEN}  - Final binary count: $final_bin_count${NC}"
-    echo -e "${GREEN}  - Installation directory: $TX3_ROOT_DIR${NC}"
+    echo -e "${GREEN}  - Installation directory: $TX3_ROOT${NC}"
     echo -e "${GREEN}  - Manifest updates: $initial_manifest_mtime → $updated_manifest_mtime → $final_manifest_mtime${NC}"
 }
 
