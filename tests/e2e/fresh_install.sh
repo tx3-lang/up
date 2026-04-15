@@ -113,7 +113,7 @@ main() {
     find "$TX3_ROOT" -type f -exec ls -la {} \; 2>/dev/null || true
     
     # Check if at least one binary was installed
-    bin_count=$(find "$TX3_ROOT/$TX3_CHANNEL/bin" -type f -executable 2>/dev/null | wc -l)
+    bin_count=$(find "$TX3_ROOT/$TX3_CHANNEL/bin" -type f -perm -u+x 2>/dev/null | wc -l)
     if [[ $bin_count -gt 0 ]]; then
         echo -e "${GREEN}✓ Found $bin_count executable binaries in bin directory${NC}"
     else
